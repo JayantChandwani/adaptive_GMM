@@ -39,10 +39,39 @@ pip install -e .
 
 ## Run the Pipeline
 
-Generate datasets, train the baseline model, and run the online test pipeline:
+Generate datasets, train a model, and run the online test pipeline:
 
 ```bash
-python -m src.eval.train_and_evaluate
+python -m src.eval.train_and_evaluate --model gmm
 ```
 
-This writes datasets to `data/simulated/` and experiment outputs to `experiments/`.
+Run the DP-GMM model:
+
+```bash
+python -m src.eval.train_and_evaluate --model dpmm
+```
+
+Run the drift-aware DP-GMM model:
+
+```bash
+python -m src.eval.train_and_evaluate --model dpmm_da
+```
+
+Run all models in one command:
+
+```bash
+python -m src.eval.train_and_evaluate --model all
+```
+
+Optional batch size for online test updates:
+
+```bash
+python -m src.eval.train_and_evaluate --model dpmm_da --batch-size 128
+```
+
+Outputs:
+- Datasets: `data/simulated/simulated_drift_*.npz`
+- GMM experiments: `experiments/gmm/`
+- DP-GMM experiments: `experiments/dpmm/`
+- Drift-aware DP-GMM experiments: `experiments/dpmm_da/`
+- Combined summary (when `--model all`): `experiments/summary_all_models.json`
