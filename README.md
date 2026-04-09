@@ -17,7 +17,7 @@ This project explores Gaussian mixture based anomaly detection, starting with a 
 ## Environment Setup
 
 Requirements:
-- Python 3.10+
+- Python 3.11+
 
 Install dependencies:
 
@@ -31,7 +31,7 @@ pip install -e .
 Or with Conda:
 
 ```bash
-conda create -n adaptive_gmm python=3.10 -y
+conda create -n adaptive_gmm python=3.11 -y
 conda activate adaptive_gmm
 pip install -U pip
 pip install -e .
