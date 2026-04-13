@@ -1,11 +1,7 @@
-from typing import Any
 import numpy as np
 from sklearn.mixture import GaussianMixture
 
-try:
-    from .basemodel import GMMBaseModel
-except ImportError:
-    from basemodel import GMMBaseModel
+from .basemodel import GMMBaseModel
 
 
 class GMM(GMMBaseModel):
@@ -85,29 +81,3 @@ class GMM(GMMBaseModel):
         scores = self.model.score_samples(X)
         final_threshold = self._threshold if threshold is None else threshold
         return scores < final_threshold
-
-    def get_state(self) -> dict[str, Any]:
-        state: dict[str, Any] = {
-            "params": {
-                "n_components": self.n_components,
-                "covariance_type": self.covariance_type,
-                "random_state": self.random_state,
-                "max_iter": self.max_iter,
-                "reg_covar": self.reg_covar,
-                "threshold_quantile": self.threshold_quantile,
-                "max_buffer_size": self.max_buffer_size,
-            },
-            "threshold": self._threshold,
-            "buffer": self._buffer,
-            "model": {
-                "weights_": self.model.weights_,
-                "means_": self.model.means_,
-                "covariances_": self.model.covariances_,
-                "precisions_cholesky_": self.model.precisions_cholesky_,
-                "converged_": self.model.converged_,
-                "n_iter_": self.model.n_iter_,
-                "lower_bound_": self.model.lower_bound_,
-            },
-        }
-
-        return state

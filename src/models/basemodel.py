@@ -21,7 +21,3 @@ class GMMBaseModel(ABC):
     def predict_anomaly(self, X):
         pass
 
-    @abstractmethod
-    def get_state(self):
-        pass
-

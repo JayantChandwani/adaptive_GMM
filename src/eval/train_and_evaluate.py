@@ -17,7 +17,7 @@ from sklearn.preprocessing import StandardScaler
 
 from src.models.basemodel import GMMBaseModel
 from src.models.dpmm import DPGMM
-from src.models.dpmm_da import DPGMMDriftAware
+# from src.models.dpmm_da import DPGMMDriftAware
 from src.models.gmm import GMM
 from src.utils.generate_simulated_ds import save_dataset_suite, save_simulated_dataset
 
@@ -37,27 +37,26 @@ def _build_model(model_name: str) -> GMMBaseModel:
             random_state=42,
             max_iter=600,
             tol=1e-2,
-            n_init=1,
+            n_init=2,
             reg_covar=5e-3,
             alpha=0.3,
             threshold_quantile=0.01,
-            forgetting_factor=0.1,
         )
-    if model_name == "dpmm_da":
-        return DPGMMDriftAware(
-            n_components=8,
-            covariance_type="diag",
-            random_state=42,
-            max_iter=600,
-            tol=1e-2,
-            n_init=1,
-            reg_covar=5e-3,
-            alpha0=0.3,
-            gamma=0.05,
-            beta=0.3,
-            threshold_quantile=0.01,
-            forgetting_factor=0.1,
-        )
+    # if model_name == "dpmm_da":
+    #     return DPGMMDriftAware(
+    #         n_components=8,
+    #         covariance_type="diag",
+    #         random_state=42,
+    #         max_iter=600,
+    #         tol=1e-2,
+    #         n_init=2,
+    #         reg_covar=5e-3,
+    #         alpha0=0.3,
+    #         gamma=0.05,
+    #         beta=0.3,
+    #         threshold_quantile=0.01,
+    #         forgetting_factor=0.1,
+    #     )
     raise ValueError(f"Unsupported model_name: {model_name}")
 
 
@@ -92,9 +91,6 @@ def train(
 
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
-    model_state_path = save_dir / f"{_model_tag(model)}_state.npz"
-    state = model.get_state()
-    np.savez(model_state_path, **state)
 
     return model, scaler, data
 
@@ -103,11 +99,18 @@ def test(
     model: GMMBaseModel,
     scaler: StandardScaler,
     data: dict[str, np.ndarray],
-    batch_size: int = 128,
+    batch_size: int = 1,
+    update_normal_only: bool = True,
+    freeze_threshold: bool = True,
     metrics_path: str | Path = "experiments/default/metrics.json",
 ) -> dict[str, float]:
     X_test = data["X_test"]
     y_test = data["y_test"]
+    X_train = data["X_train"]
+
+    train_scores = model.score_samples(scaler.transform(X_train))
+    threshold_quantile = float(getattr(model, "threshold_quantile", 0.01))
+    fixed_threshold = float(np.quantile(train_scores, threshold_quantile))
 
     all_scores: list[np.ndarray] = []
     all_preds: list[np.ndarray] = []
@@ -116,10 +119,21 @@ def test(
         batch = X_test[i : i + batch_size]
         batch_scaled = scaler.transform(batch)
         batch_scores = model.score_samples(batch_scaled)
-        batch_preds = model.predict_anomaly(batch_scaled).astype(int)
+        threshold = fixed_threshold if freeze_threshold else None
+        batch_preds = model.predict_anomaly(batch_scaled, threshold=threshold).astype(int)
         all_scores.append(batch_scores)
         all_preds.append(batch_preds)
-        model.partial_fit(batch_scaled)
+
+        update_batch = batch_scaled
+        if update_normal_only:
+            update_batch = batch_scaled[batch_preds == 0]
+
+        min_update_samples = 2
+        if isinstance(model, DPGMM):
+            min_update_samples = max(2, int(model.n_components))
+
+        if len(update_batch) >= min_update_samples:
+            model.partial_fit(update_batch)
 
     scores = np.concatenate(all_scores)
     y_pred = np.concatenate(all_preds)
@@ -132,6 +146,9 @@ def test(
         "pr_auc": float(average_precision_score(y_test, -scores)),
         "n_test": int(len(y_test)),
         "n_anomaly": int(y_test.sum()),
+        "update_normal_only": bool(update_normal_only),
+        "freeze_threshold": bool(freeze_threshold),
+        "threshold_quantile": threshold_quantile,
     }
 
     metrics_path = Path(metrics_path)
@@ -142,10 +159,10 @@ def test(
 
 
 def run_pipeline() -> dict[str, Any]:
-    return run_model_pipeline(model_name="gmm", batch_size=128)
+    return run_model_pipeline(model_name="gmm", batch_size=1)
 
 
-def run_model_pipeline(model_name: str = "gmm", batch_size: int = 128) -> dict[str, Any]:
+def run_model_pipeline(model_name: str = "gmm", batch_size: int = 1) -> dict[str, Any]:
     save_dataset_suite()
     dataset_dir = Path("data/simulated")
     exp_root = Path("experiments") / model_name
@@ -177,7 +194,7 @@ def run_model_pipeline(model_name: str = "gmm", batch_size: int = 128) -> dict[s
     return {"metrics": all_metrics}
 
 
-def run_all_models(batch_size: int = 128) -> dict[str, Any]:
+def run_all_models(batch_size: int = 1) -> dict[str, Any]:
     combined: dict[str, Any] = {}
     for model_name in ("gmm", "dpmm", "dpmm_da"):
         combined[model_name] = run_model_pipeline(model_name=model_name, batch_size=batch_size)
@@ -195,7 +212,7 @@ def _parse_args() -> argparse.Namespace:
         choices=["gmm", "dpmm", "dpmm_da", "all"],
         help="Model to run",
     )
-    parser.add_argument("--batch-size", type=int, default=128, help="Online evaluation batch size")
+    parser.add_argument("--batch-size", type=int, default=32, help="Online evaluation batch size")
     return parser.parse_args()
 
 
