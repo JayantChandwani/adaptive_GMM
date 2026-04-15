@@ -13,6 +13,7 @@ This project explores Gaussian mixture based anomaly detection, starting with a 
 - `src/eval/` – training and online testing pipeline
 - `data/` – generated datasets and saved artifacts
 - `experiments/` – per-run experiment outputs and metrics
+- `baseline_experiments/` – optional location for NSL-KDD baseline runs (if you set `exp_root` when calling `run_nsl_kdd`; see below)
 
 ## Environment Setup
 
@@ -75,22 +76,8 @@ Outputs:
 - DP-GMM experiments: `experiments/dpmm/`
 - Drift-aware DP-GMM experiments: `experiments/dpmm_da/`
 - Combined summary (when `--model all`): `experiments/summary_all_models.json`
-# Adaptive GMM
 
-This project explores Gaussian mixture based anomaly detection, starting with a simple sklearn-backed GMM baseline and extending toward drift-aware and adaptive mixture models.
 
-## Project Structure
-
-- `src/models/` – model implementations
-	- `gmm.py` – sklearn wrapper used as the baseline model
-	- `dpmm.py` – custom Dirichlet process mixture model
-	- `dpmm_da.py` – drift-aware DP mixture model
-	- `basemodel.py` – shared model interface
-- `src/utils/` – dataset generation and helper scripts
-- `src/eval/` – training and online testing pipeline
-- `data/` – generated datasets and saved artifacts (including NSL-KDD)
-- `experiments/` – per-run experiment outputs and metrics
-- `baseline_experiments/` – optional location for NSL-KDD baseline runs (if you set `exp_root` when calling `run_nsl_kdd`; see below)
 
 ## NSL-KDD dataset
 
@@ -160,37 +147,3 @@ run_nsl_kdd(exp_root="baseline_experiments/nsl_kdd")
 
 That layout is suitable for versioning baseline figures and metrics alongside the repo without mixing them with the simulated-drift runs under `experiments/`.
 
-## Environment Setup
-
-Requirements:
-- Python 3.11+
-
-Install dependencies:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -U pip
-pip install -e .
-```
-
-Or with Conda:
-
-```bash
-conda create -n adaptive_gmm python=3.11 -y
-conda activate adaptive_gmm
-pip install -U pip
-pip install -e .
-```
-
-
-
-## Run the Pipeline
-
-Generate datasets, train the baseline model, and run the online test pipeline:
-
-```bash
-python -m src.eval.train_and_evaluate
-```
-
-This writes datasets to `data/simulated/` and experiment outputs to `experiments/`.
