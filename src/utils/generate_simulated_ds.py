@@ -29,7 +29,7 @@ def generate_simulated_dataset(
     drift_level: float = 0.5,
     random_state: int = 42,
 ) -> dict[str, np.ndarray]:
-    """Generate a 2D dataset with controllable drift + anomalies.
+    """Generate a 2D stream with gradual drift and injected anomalies.
 
     Returns dictionary with:
         X_train, y_train, X_test, y_test
@@ -49,44 +49,41 @@ def generate_simulated_dataset(
     )
     train_weights = np.array([0.5, 0.5], dtype=float)
 
-    # Drift is applied as shift from training distribution to test distribution.
+    # Drift end-point relative to the training distribution.
     mean_shift = np.array([[1.8, -0.8], [1.8, -0.8]], dtype=float) * drift_level
-    test_means = train_means + mean_shift
-    test_covs = np.array(
+    end_means = train_means + mean_shift
+    end_covs = np.array(
         [
             [[0.8 + 0.3 * drift_level, 0.1], [0.1, 0.9 + 0.3 * drift_level]],
             [[0.9 + 0.3 * drift_level, -0.05], [-0.05, 0.8 + 0.3 * drift_level]],
         ],
         dtype=float,
     )
-    test_weights = np.array([0.5 - 0.1 * drift_level, 0.5 + 0.1 * drift_level], dtype=float)
+    end_weights = np.array([0.5 - 0.1 * drift_level, 0.5 + 0.1 * drift_level], dtype=float)
 
     X_train = _sample_mixture(n_train, train_means, train_covs, train_weights, rng)
     y_train = np.zeros(n_train, dtype=int)
 
-    X_test_normal = _sample_mixture(
-        n_test_normal,
-        test_means,
-        test_covs,
-        test_weights,
-        rng,
-    )
+    n_test = n_test_normal + n_test_anomaly
+    anomaly_rate = n_test_anomaly / max(1, n_test)
+    X_test = np.zeros((n_test, train_means.shape[1]), dtype=float)
+    y_test = np.zeros(n_test, dtype=int)
 
-    # Anomalies sampled from a wide range away from the core modes
-    X_test_anomaly = rng.uniform(low=-8.5, high=8.5, size=(n_test_anomaly, 2))
+    # Online stream: distribution drifts smoothly over time; no shuffling.
+    for t in range(n_test):
+        progress = t / max(1, n_test - 1)
 
-    X_test = np.vstack([X_test_normal, X_test_anomaly])
-    y_test = np.hstack(
-        [
-            np.zeros(n_test_normal, dtype=int),
-            np.ones(n_test_anomaly, dtype=int),
-        ]
-    )
+        if rng.random() < anomaly_rate:
+            X_test[t] = rng.uniform(low=-8.5, high=8.5, size=train_means.shape[1])
+            y_test[t] = 1
+            continue
 
-    # Shuffle test set
-    perm = rng.permutation(len(X_test))
-    X_test = X_test[perm]
-    y_test = y_test[perm]
+        means_t = train_means + progress * (end_means - train_means)
+        covs_t = train_covs + progress * (end_covs - train_covs)
+        weights_t = train_weights + progress * (end_weights - train_weights)
+        weights_t = np.clip(weights_t, 1e-6, None)
+        weights_t = weights_t / weights_t.sum()
+        X_test[t] = _sample_mixture(1, means_t, covs_t, weights_t, rng)[0]
 
     return {
         "X_train": X_train,
