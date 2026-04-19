@@ -40,42 +40,53 @@ pip install -e .
 
 ## Run the Pipeline
 
-Generate datasets, train a model, and run the online test pipeline:
+The CLI in `src/eval/train_and_evaluate.py` covers two pipelines:
+
+1. **Simulated drift suite** (default): generates a family of simulated streams with increasing drift levels and evaluates a model on each.
+2. **NSL-KDD** (`--nsl`): trains on normal traffic only, then either runs a frozen one-shot test or streams the test set in arrival order with `partial_fit` (`--online`).
+
+### CLI flags
+
+| Flag | Default | Notes |
+|------|---------|-------|
+| `--model {gmm,dpmm,dpmm_da,all}` | `gmm` | Model to use. `dpmm_da` requires `src/models/dpmm_da.py` to be implemented. |
+| `--k <int>` | model default | Number of components / DP-GMM truncation level. Overrides the per-model default in `_build_model`. |
+| `--batch-size <int>` | `32` | Streaming batch size for the simulated online test or for `--nsl --online`. |
+| `--nsl` | off | Switch to the NSL-KDD pipeline. |
+| `--online` | off | With `--nsl`: stream test in arrival order with `partial_fit`. Without it: frozen one-shot scoring. |
+| `--dataset <path>` | `data/nsl_kdd/nsl_kdd.npz` | NSL-KDD `.npz` path. |
+| `--exp-root <path>` | `experiments/nsl_kdd_dpmm` | Output root for `--nsl` runs. |
+
+### Common commands
+
+Simulated drift suite (each model writes per-dataset metrics + a `summary.json`):
 
 ```bash
 python -m src.eval.train_and_evaluate --model gmm
-```
-
-Run the DP-GMM model:
-
-```bash
 python -m src.eval.train_and_evaluate --model dpmm
+python -m src.eval.train_and_evaluate --model all          # gmm + dpmm (+ dpmm_da if implemented)
 ```
 
-Run the drift-aware DP-GMM model:
+NSL-KDD frozen baseline (one-shot scoring, no model updates during test):
 
 ```bash
-python -m src.eval.train_and_evaluate --model dpmm_da
+python -m src.eval.train_and_evaluate --nsl --model dpmm --batch-size 256 --k 12
 ```
 
-Run all models in one command:
+NSL-KDD streaming evaluation (arrival-ordered batches, `partial_fit` per batch):
 
 ```bash
-python -m src.eval.train_and_evaluate --model all
+python -m src.eval.train_and_evaluate --nsl --model dpmm --online --batch-size 256 --k 12
 ```
 
-Optional batch size for online test updates:
+### Outputs
 
-```bash
-python -m src.eval.train_and_evaluate --model dpmm_da --batch-size 128
-```
-
-Outputs:
-- Datasets: `data/simulated/simulated_drift_*.npz`
-- GMM experiments: `experiments/gmm/`
-- DP-GMM experiments: `experiments/dpmm/`
-- Drift-aware DP-GMM experiments: `experiments/dpmm_da/`
-- Combined summary (when `--model all`): `experiments/summary_all_models.json`
+- Datasets: `data/simulated/simulated_drift_*.npz`, `data/nsl_kdd/nsl_kdd.npz`
+- Simulated runs: `experiments/<model_name>/<dataset_stem>/{metrics.json, ...}`, plus `experiments/<model_name>/summary.json`
+- Combined summary (`--model all`): `experiments/summary_all_models.json`
+- NSL-KDD runs: `<exp-root>/<config_name>/{metrics.json, scores.npz, *.png}` and a cumulative `<exp-root>/summary.json`. Config name encodes the run, e.g.:
+  - `dpmm_online_bs256_k12_normalonly_fixthr/`
+  - `dpmm_frozen_bs256_k12_normalonly_fixthr/`
 
 
 
@@ -99,12 +110,13 @@ This downloads the [Hassan NSL-KDD bundle](https://www.kaggle.com/datasets/hassa
 - One-hot encodes categoricals `protocol_type`, `service`, and `flag` (encoder fit on **train** only, then applied to test).
 - Concatenates numeric features with the one-hot columns.
 - **Does not** apply `StandardScaler` here; scaling is done during training/evaluation so train statistics are not leaked into test preprocessing.
+- Saves explicit arrival-time vectors `t_train` and `t_test` (= row index in the ARFF file). The streaming evaluator uses `t_test` to sort batches by time of arrival.
 
 ### Where it is stored
 
 | Path | Contents |
 |------|----------|
-| `data/nsl_kdd/nsl_kdd.npz` | `X_train`, `y_train`, `X_test`, `y_test` (NumPy arrays) |
+| `data/nsl_kdd/nsl_kdd.npz` | `X_train`, `y_train`, `X_test`, `y_test`, `t_train`, `t_test` (NumPy arrays) |
 
 If the file already exists, `load_nsl_kdd()` skips re-download unless you use `force_redownload=True` in code.
 
@@ -128,22 +140,9 @@ The baseline treats anomaly detection as **density estimation on normal traffic 
 1. **Train:** `StandardScaler` is fit on **normal training rows only** (`y_train == 0`). A Gaussian mixture (`GMM`) is fit on that scaled normal data (number of components `K` is chosen separately, e.g. via a BIC sweep).
 2. **Test:** The same scaler transforms `X_test`. The **frozen** model scores every test point with `score_samples` and flags anomalies with `predict_anomaly` (threshold from training scores). The model is **not** updated during testing for this baseline.
 
-**Commands** (from project root):
+The dedicated baseline driver lives in `src/eval/train_and_evaluate_baselineGMM.py` (`bic` / `nsl` subcommands) and writes per-`K` folders (`k8`, `k12`, ...) plus `summary.json` and ROC/PR plots under `baseline_experiments/nsl_kdd/` (or wherever you point `exp_root`). The unified CLI in `src/eval/train_and_evaluate.py` can also reproduce the frozen baseline directly:
 
 ```bash
-# Optional: sweep K and write BIC plot (default output: experiments/nsl_kdd/bic_sweep.png)
-python -m src.eval.train_and_evaluate bic
-
-# Train/test for default K values and write metrics + plots
-python -m src.eval.train_and_evaluate nsl
+python -m src.eval.train_and_evaluate --nsl --model gmm --k 12
 ```
-
-By default, outputs go under `experiments/nsl_kdd/` (per-`K` folders `k8`, `k12`, etc., plus `summary.json`, ROC/PR plots, and related figures). To write results under `baseline_experiments/` instead, call from Python:
-
-```python
-from src.eval.train_and_evaluate import run_nsl_kdd
-run_nsl_kdd(exp_root="baseline_experiments/nsl_kdd")
-```
-
-That layout is suitable for versioning baseline figures and metrics alongside the repo without mixing them with the simulated-drift runs under `experiments/`.
 

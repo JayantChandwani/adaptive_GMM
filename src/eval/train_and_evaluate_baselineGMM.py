@@ -1,3 +1,19 @@
+"""NSL-KDD **baseline** experiments: BIC sweep and per-K sklearn GMM.
+
+Data protocol (see ``run_nsl_kdd`` and ``bic_sweep``):
+
+- Load ``data/nsl_kdd/nsl_kdd.npz`` with ``X_train``, ``y_train``, ``X_test``, ``y_test``.
+- **Scaling:** ``StandardScaler`` fit only on **normal** training rows
+  (``X_train[y_train == 0]``).
+- **Training:** A ``GMM`` is fit on that scaled normal data only (unsupervised density
+  of normal traffic).
+- **Testing:** ``X_test`` is transformed with the same scaler; anomalies are low-density
+  vs a threshold from training (no ``partial_fit`` on test for this baseline).
+
+For **DPGMM** (or GMM with the online simulated pipeline), use
+``src.eval.train_and_evaluate`` instead, e.g. ``--nsl --model dpmm`` — see that module’s
+``run_nsl_kdd_dpmm``, which mirrors the same NSL preprocessing.
+"""
 from __future__ import annotations
 
 import json

@@ -101,8 +101,22 @@ def load_nsl_kdd(
 
     X_train, y_train, X_test, y_test = _encode(df_train, df_test)
 
+    # NSL-KDD has no explicit timestamp column. The ARFF row order is the
+    # arrival order of the network records, so we expose it as t_train / t_test
+    # and the streaming evaluator sorts batches by these values.
+    t_train = np.arange(len(X_train), dtype=np.int64)
+    t_test = np.arange(len(X_test), dtype=np.int64)
+
     output_dir.mkdir(parents=True, exist_ok=True)
-    np.savez(npz_path, X_train=X_train, y_train=y_train, X_test=X_test, y_test=y_test)
+    np.savez(
+        npz_path,
+        X_train=X_train,
+        y_train=y_train,
+        X_test=X_test,
+        y_test=y_test,
+        t_train=t_train,
+        t_test=t_test,
+    )
 
     print(f"Saved NSL-KDD to {npz_path}")
     print(f"  X_train: {X_train.shape}, anomalies in train: {y_train.sum()}")
@@ -113,6 +127,8 @@ def load_nsl_kdd(
         "y_train": y_train,
         "X_test": X_test,
         "y_test": y_test,
+        "t_train": t_train,
+        "t_test": t_test,
     }
 
 
