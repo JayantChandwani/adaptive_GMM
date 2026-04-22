@@ -200,8 +200,8 @@ def test(
             update_batch = batch_scaled[batch_preds == 0]
 
         min_update_samples = 2
-        if isinstance(model, DPGMM):
-            min_update_samples = max(2, int(model.n_components))
+        if hasattr(model, "n_components"):
+            min_update_samples = max(2, int(getattr(model, "n_components", 2)))
 
         if len(update_batch) >= min_update_samples:
             model.partial_fit(update_batch)
