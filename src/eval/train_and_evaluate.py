@@ -441,6 +441,11 @@ if __name__ == "__main__":
     if args.nsl:
         if args.model == "all":
             raise SystemExit("--model all is for the simulated suite only; use --model dpmm or --model gmm with --nsl")
+        if args.model == "gmm" and args.online:
+            raise SystemExit(
+                "--nsl --model gmm --online is not supported. "
+                "GMM uses buffered refit behavior and does not have true online mode in this pipeline."
+            )
         run_nsl_kdd_dpmm(
             dataset_path=args.dataset,
             exp_root=args.exp_root,
