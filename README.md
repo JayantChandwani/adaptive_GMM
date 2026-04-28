@@ -2,18 +2,33 @@
 
 This project explores Gaussian mixture based anomaly detection, starting with a simple sklearn-backed GMM baseline and extending toward drift-aware and adaptive mixture models.
 
-## Project Structure
+## Overview
+
+The codebase contains three closely related model families:
+
+- `gmm` as the baseline density estimator
+- `dpmm` as the online Dirichlet process mixture model
+- `dpmm_da` as the drift-aware variant
+
+The repository is organized around two experiment tracks:
+
+- simulated drift experiments for controlled comparison
+- NSL-KDD experiments for a real benchmark dataset
+
+For a full end-to-end batch run, use `run_and_plot_nsl_exp.sh`, which executes the simulated and NSL-KDD experiments and then generates comparison plots.
+
+## Repository Layout
 
 - `src/models/` – model implementations
 	- `gmm.py` – sklearn wrapper used as the baseline model
 	- `dpmm.py` – custom Dirichlet process mixture model
 	- `dpmm_da.py` – drift-aware DP mixture model
 	- `basemodel.py` – shared model interface
-- `src/utils/` – dataset generation and helper scripts
 - `src/eval/` – training and online testing pipeline
+- `src/utils/` – dataset generation and plotting helpers
 - `data/` – generated datasets and saved artifacts
-- `experiments/` – per-run experiment outputs and metrics
-- `baseline_experiments/` – optional location for NSL-KDD baseline runs (if you set `exp_root` when calling `run_nsl_kdd`; see below)
+- `experiments/` – per-run experiment outputs, summaries, and plots
+- `baseline_experiments/` – optional location for NSL-KDD baseline runs
 
 ## Environment Setup
 
@@ -38,7 +53,17 @@ pip install -U pip
 pip install -e .
 ```
 
-## Run the Pipeline
+## Quick Start
+
+If you want the full workflow in one command, run:
+
+```bash
+bash run_and_plot_nsl_exp.sh
+```
+
+This script checks model availability, downloads the NSL-KDD dataset if needed, runs the simulated drift suite, runs the NSL-KDD experiments, and generates comparison plots.
+
+## Running Experiments
 
 The CLI in `src/eval/train_and_evaluate.py` covers two pipelines:
 
@@ -79,7 +104,7 @@ NSL-KDD streaming evaluation (arrival-ordered batches, `partial_fit` per batch):
 python -m src.eval.train_and_evaluate --nsl --model dpmm --online --batch-size 256 --k 12
 ```
 
-### Outputs
+### Output Structure
 
 - Datasets: `data/simulated/simulated_drift_*.npz`, `data/nsl_kdd/nsl_kdd.npz`
 - Simulated runs: `experiments/<model_name>/<dataset_stem>/{metrics.json, ...}`, plus `experiments/<model_name>/summary.json`
@@ -88,9 +113,41 @@ python -m src.eval.train_and_evaluate --nsl --model dpmm --online --batch-size 2
   - `dpmm_online_bs256_k12_normalonly_fixthr/`
   - `dpmm_frozen_bs256_k12_normalonly_fixthr/`
 
+## Plotting Results
 
+The utility script for plotting a single model's simulated-drift results lives in `src/utils/plot_single_model.py`.
 
-## NSL-KDD dataset
+It reads the per-dataset `metrics.json` files from:
+
+- `experiments/gmm/simulated_drift_*`
+- `experiments/dpmm/simulated_drift_*`
+- `experiments/dpmm_da/simulated_drift_*`
+
+and writes plots to `experiments/<model>/plots/` by default.
+
+### Example usage
+
+```bash
+python -m src.utils.plot_single_model --model gmm
+python -m src.utils.plot_single_model --model dpmm
+python -m src.utils.plot_single_model --model dpmm_da
+```
+
+### Generated files
+
+For each model, the script creates:
+
+- `<model>/plots/precision_vs_drift.png`
+- `<model>/plots/recall_vs_drift.png`
+- `<model>/plots/f1_vs_drift.png`
+- `<model>/plots/roc_auc_vs_drift.png`
+- `<model>/plots/pr_auc_vs_drift.png`
+- `<model>/plots/average_metrics.png`
+- `<model>/simulated_summary.json`
+
+The plots use the slide-inspired color palette from the presentation screenshot.
+
+## NSL-KDD Dataset
 
 ### Download
 
@@ -145,4 +202,8 @@ The dedicated baseline driver lives in `src/eval/train_and_evaluate_baselineGMM.
 ```bash
 python -m src.eval.train_and_evaluate --nsl --model gmm --k 12
 ```
+
+## Notes on the Batch Script
+
+`run_and_plot_nsl_exp.sh` is the convenience wrapper for reproducing the whole experiment pipeline end to end. It runs the simulated experiments, then the NSL-KDD experiments, and finally creates the comparison plots under `experiments/comparisons/`.
 
